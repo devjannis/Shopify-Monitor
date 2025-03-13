@@ -2,7 +2,7 @@ import tls_client, json, time, threading, random, os, datetime
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from urllib.parse import urlparse
 from dotenv import load_dotenv
-
+import asyncio
 load_dotenv()
 
 class Shopify():
@@ -24,9 +24,9 @@ class Shopify():
         else:
             with open("proxies.txt","r") as f:
                 self.proxies = f.read().splitlines()
-        self.get_product_json()
+        asyncio.run(self.get_product_json())
     
-    def process_product(self, product):
+    async def process_product(self, product):
         keyword_matched = False
         
         if self.keywords:
@@ -53,10 +53,12 @@ class Shopify():
                     if keyword in product_title:
                         keyword_matched = True
                         break
+        else:
+            keyword_matched = True
 
         # If keyword matched, proceed with processing the product
         if keyword_matched:
-            self.logging(f"Monitoring {product['title']} | {self.base_url}")
+            await self.logging(f"Monitoring {product['title']} | {self.base_url}")
             notification_dict = {}
             product_id = str(product["id"])
             
@@ -115,15 +117,15 @@ class Shopify():
                             
             # Send notifications if any
             if notification_dict:
-                self.send_notification(notification_dict)
-            self.save_previous_availability(self.data)
+                await self.send_notification(notification_dict)
+            await self.save_previous_availability(self.data)
 
-    def get_product_json(self):
+    async def get_product_json(self):
         while True:
             with self.code_lock:
                 self.session.cookies.clear()
-                self.setupProxie()
-                self.load_previous_availability()
+                await self.setupProxie()
+                await self.load_previous_availability()
                 response = self.session.get(url=f"{self.link}/products.json?limit=10")
                 try:
                     data = response.json()['products']
@@ -132,13 +134,13 @@ class Shopify():
 
                 if len(data) == 1:
                     product = data['product']
-                    self.process_product(product=product)
+                    await self.process_product(product=product)
                 else:
                     for product in data:
-                        self.process_product(product=product)
-                time.sleep(self.delay / 1000)
+                        await self.process_product(product=product)
+                await asyncio.sleep(self.delay) 
 
-    def send_notification(self, notification_dict):
+    async def send_notification(self, notification_dict):
         self.webhook = DiscordWebhook(url=self.webhook_url, rate_limit_retry=True)
         pid = next(iter(notification_dict))
         name = self.data[self.link][pid]['title']
@@ -162,7 +164,6 @@ class Shopify():
         total_length = sum(len(link) for link in links)
         num_splits = (total_length + max_length_per_split - 1) // max_length_per_split
 
-        print(num_splits, total_length)
         if num_splits == 1:
             # Join the fields as before
             links = '\n'.join(links)
@@ -219,7 +220,7 @@ class Shopify():
         self.webhook.add_embed(embed)
         self.webhook.execute()
 
-    def load_previous_availability(self):
+    async def load_previous_availability(self):
         try:
             with self.json_file_lock:
                 with open("previous_availability.json", "r") as file:
@@ -230,12 +231,12 @@ class Shopify():
         except FileNotFoundError:
             self.data = {}
 
-    def save_previous_availability(self, previous_availability):
+    async def save_previous_availability(self, previous_availability):
         with self.json_file_lock:
             with open("previous_availability.json", "w") as file:
                 json.dump(previous_availability, file)
 
-    def setupProxie(self):
+    async def setupProxie(self):
         if self.proxies:
             try:
                 proxy = random.choice(self.proxies)
@@ -249,11 +250,11 @@ class Shopify():
         
             self.session.proxies.update(proxy)
 
-    def logging(self, text):
+    async def logging(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {text}")
 
 sites = [
-    {"link": "https://example.com/", "keywords": "+Example, -Example"},
+    {"link": "https://de.afew-store.com/", "keywords": ""},
 ]
 
 delay = 15
@@ -273,4 +274,4 @@ if __name__ == "__main__":
             else:
                 keyword_list = []
                 keyword_list.append(keywords)
-        threading.Thread(target=Shopify,args=(site['link'], keyword_list, delay, json_file_lock, code_lock)).start()
+        threading.Thread(target=Shopify,args=(site['link'], keyword_list, delay, json_file_lock, code_lock, webhook_url)).start()
