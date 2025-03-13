@@ -148,7 +148,7 @@ class Shopify():
         image = self.data[self.link][pid]['image']
         price = self.data[self.link][pid]['price']
         url = f"{self.link}/products/{handle}"
-        embed = DiscordEmbed(title=name, url=url, color=0xf75c02)
+        embed = DiscordEmbed(title=name, url=url, color=0x000000)
         embed.set_author(name=self.link, url=self.link)
         embed.add_embed_field(name=f"**PID**", value=pid, inline=False)
         embed.add_embed_field(name=f"**Price**", value=f"{price}€", inline=False)
